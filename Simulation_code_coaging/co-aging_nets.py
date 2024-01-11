@@ -71,8 +71,8 @@ def coaging(GA, NA, vertex_stateA, dA, CA, rA, GB, NB, vertex_stateB, dB, CB, rB
     history_A = []
     history_B = []
     
-    #INTRINSIC AGING#
     while phiA>0.1 or phiB>0.1:
+        #INTRINSIC AGING#
         for vertex in GA.get_vertices():
             if vertex_stateA[vertex] == 0 and (np.random.random() < dA):
                     vertex_stateA[vertex] = 1
