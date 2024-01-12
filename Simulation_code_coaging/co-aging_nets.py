@@ -65,14 +65,13 @@ def coaging(GA, NA, vertex_stateA, dA, CA, rA, GB, NB, vertex_stateB, dB, CB, rB
     phiB = vitality(GB, NB, vertex_stateB)
     phisA = [phiA]
     phisB = [phiB]
+
+    death_cause_A = 0
+    death_cause_B = 0
     
-    #Keeps track of the ratio of functional and unfunctional nodes
-    ## (functional:0, unfunctional due to intrinsic aging: 1, due to co-aging: 2)
-    history_A = []
-    history_B = []
-    
+    ## Node labels: functional=0, unfunctional due to intrinsic aging=1, due to co-aging:=2
+    #INTRINSIC AGING#
     while phiA>0.1 or phiB>0.1:
-        #INTRINSIC AGING#
         for vertex in GA.get_vertices():
             if vertex_stateA[vertex] == 0 and (np.random.random() < dA):
                     vertex_stateA[vertex] = 1
@@ -128,12 +127,13 @@ def coaging(GA, NA, vertex_stateA, dA, CA, rA, GB, NB, vertex_stateB, dB, CB, rB
         ratio_aging_B = sum(1 for vertex in GB.iter_vertices() if vertex_stateB[vertex] == 1)/NB
         ratio_coaging_B = sum(1 for vertex in GB.iter_vertices() if vertex_stateB[vertex] == 2)/NB
         
-        #Check if both networks are dead 
+        #Check if both networks are dead and save the cause of death
         if ratio_func_A < 0.1 and ratio_func_B < 0.1:
             phisA.append(0)
             phisB.append(0)
-            history_A.append([round(ratio_aging_A,3), round(ratio_coaging_A,3)])
-            history_B.append([round(ratio_aging_B,3), round(ratio_coaging_B,3)])
+            #network is marked 0 if the reason of death is intrinsic aging and 1 if it is co-aging
+            death_cause_A = 0 if ratio_aging_A>ratio_coaging_A else 1
+            death_cause_B = 0 if ratio_aging_B>ratio_coaging_B else 1
             break
 
         #CO-AGING#
@@ -175,9 +175,7 @@ def coaging(GA, NA, vertex_stateA, dA, CA, rA, GB, NB, vertex_stateB, dB, CB, rB
         ratio_aging_A = sum(1 for vertex in GA.iter_vertices() if vertex_stateA[vertex] == 1)/NA
         ratio_coaging_A = sum(1 for vertex in GA.iter_vertices() if vertex_stateA[vertex] == 2)/NA
 
-        #Check if the network A is dead
-        if ratio_func_A> 0.1:
-            history_A.append([round(ratio_aging_A,3), round(ratio_coaging_A,3)])
+        #Update vitality
         phiA = ratio_func_A
         if phiA > 0.1:
             phisA.append(phiA)
@@ -205,10 +203,8 @@ def coaging(GA, NA, vertex_stateA, dA, CA, rA, GB, NB, vertex_stateB, dB, CB, rB
         ratio_func_B = sum(1 for vertex in GB.iter_vertices() if vertex_stateB[vertex] == 0)/NB
         ratio_aging_B = sum(1 for vertex in GB.iter_vertices() if vertex_stateB[vertex] == 1)/NB
         ratio_coaging_B = sum(1 for vertex in GB.iter_vertices() if vertex_stateB[vertex] == 2)/NB
-        
-        #Check if the second network dead
-        if ratio_func_B > 0.1:
-            history_B.append([round(ratio_aging_B,3), round(ratio_coaging_B,3)])  
+         
+        #Update vitality
         phiB = ratio_func_B
         if phiB > 0.1:
             phisB.append(phiB)
@@ -219,8 +215,9 @@ def coaging(GA, NA, vertex_stateA, dA, CA, rA, GB, NB, vertex_stateB, dB, CB, rB
         if phiA < 0.1 and phiB < 0.1:
             phisA.append(0)
             phisB.append(0)
-            history_A.append([round(ratio_aging_A,3), round(ratio_coaging_A,3)])
-            history_B.append([round(ratio_aging_B,3), round(ratio_coaging_B,3)])
+            #network is marked 0 if the reason of death is intrinsic aging and 1 if it is co-aging
+            death_cause_A = 0 if ratio_aging_A>ratio_coaging_A else 1
+            death_cause_B = 0 if ratio_aging_B>ratio_coaging_B else 1
 
         # #Uncomment if you are working on chess fits. This cuts the game early when one of them wins
         # if phiA < 0.1 and phiB > 0.1:
@@ -228,20 +225,20 @@ def coaging(GA, NA, vertex_stateA, dA, CA, rA, GB, NB, vertex_stateB, dB, CB, rB
         # if phiA > 0.1 and phiB < 0.1:
         #     break
 
-    return len(phisA), len(phisB), history_A[-1], history_B[-1]
+    return len(phisA), len(phisB), death_cause_A, death_cause_B #length of each vitality array gives network's lifetime
 
 #Simulation parameters
-simul_num = 1200
-NA, dA, CA, rA, fA = [800, 0.002, 0.001, 0.015, 0.0]
-NB, dB, CB, rB, fB = [500, 0.003, 0.0015, 0.0, 0.0]
+simul_num = 100
+NA, dA, CA, rA, fA = [800, 0.005, 0.01, 0.015, 2.0]
+NB, dB, CB, rB, fB = [500, 0.006, 0.015, 0.0, 0.0]
 
 #Main that simulates two networks co-aging each other. This function will be parallelized
 def simulate_one_net(_):
     GA = load_graph("network_a.gt.gz")
     GB = load_graph("network_b.gt.gz")
     GA, init_stateA, GB, init_stateB = net_init(GA, NA, fA, GB, NB, fB)
-    times = coaging(GA, NA, init_stateA, dA, CA, rA, GB, NB, init_stateB, dB, CB, rB)
-    return times
+    output = coaging(GA, NA, init_stateA, dA, CA, rA, GB, NB, init_stateB, dB, CB, rB)
+    return output
 
 #Parallelization
 if __name__ == '__main__':
@@ -253,8 +250,8 @@ if __name__ == '__main__':
     # Extract times_A and times_B from results
     times_A = [result[0] for result in results]
     times_B = [result[1] for result in results]
-    #history_A = [result[2] for result in results]
-    #history_B = [result[3] for result in results]
+    death_cause_A = [result[2] for result in results]
+    death_cause_B = [result[3] for result in results]
 
     # Write the output to a file
     output_data = [
@@ -271,6 +268,8 @@ if __name__ == '__main__':
         ("CB", CB), 
         ("rB", rB),
         ("fB", fB),
+        ("death_cause_A", death_cause_A),
+        ("death_cause_B", death_cause_B),
     ]
     with open("output.txt", "w") as output:
         for label, value in output_data:
